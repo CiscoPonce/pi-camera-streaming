@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="author" content="CiscoPonce" />
+  <title>Pi Camera Viewer</title>
+  <style>
+    :root { 
+      color-scheme: dark; 
+    }
+    
+    body { 
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; 
+      margin: 0; 
+      padding: 16px; 
+      background: #0b0f14; 
+      color: #e6ebf0; 
+    }
+
+    h1 { 
+      margin: 0 0 8px; 
+      font-weight: 600; 
+      color: #ffffff;
+    }
+    
+    h2 { 
+      margin: 0 0 12px; 
+      font-weight: 600; 
+      color: #e6ebf0;
+    }
+    
+    .subtitle {
+      color: #8b949e;
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+    
+    video { 
+      width: 100%; 
+      max-width: 960px; 
+      background: #000; 
+      border-radius: 8px; 
+      border: 1px solid #2a3644; 
+    }
+    
+    .status {
+      margin-top: 16px;
+      padding: 12px;
+      background: #161b22;
+      border-radius: 6px;
+      border: 1px solid #30363d;
+      font-family: monospace;
+      font-size: 14px;
+    }
+    
+    .status.connected {
+      border-color: #238636;
+      background: #0d1117;
+    }
+    
+    .status.error {
+      border-color: #da3633;
+      background: #0d1117;
+    }
+    
+    .controls {
+      margin-top: 16px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    
+    button {
+      padding: 8px 16px;
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #e6ebf0;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    
+    button:hover {
+      background: #30363d;
+      border-color: #8b949e;
+    }
+    
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .info {
+      margin-top: 20px;
+      padding: 16px;
+      background: #0d1117;
+      border-radius: 6px;
+      border: 1px solid #21262d;
+    }
+    
+    .info h3 {
+      margin: 0 0 8px;
+      color: #e6ebf0;
+    }
+    
+    .info p {
+      margin: 4px 0;
+      color: #8b949e;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Pi Camera Viewer</h1>
+  <p class="subtitle">Raspberry Pi 5 Camera Module 3 Live Stream</p>
+  
+  <video id="player" playsinline autoplay muted></video>
+  
+  <div id="status" class="status">
+    Connecting to stream...
+  </div>
+  
+  <div class="controls">
+    <button id="reconnect">Reconnect</button>
+    <button id="toggle-mute">Unmute</button>
+    <button id="fullscreen">Fullscreen</button>
+  </div>
+  
+  <div class="info">
+    <h3>Stream Information</h3>
+    <p><strong>Protocol:</strong> <span id="protocol">WebRTC (primary), FLV (fallback)</span></p>
+    <p><strong>Resolution:</strong> <span id="resolution">1280×720</span></p>
+    <p><strong>Framerate:</strong> <span id="framerate">30 fps</span></p>
+    <p><strong>Latency:</strong> <span id="latency">~200-500ms</span></p>
+  </div>
+  
+  <script src="https://cdn.jsdelivr.net/npm/flv.js@latest/dist/flv.min.js"></script>
+  <script src="srs.player.js"></script>
+  <script>
+    // Enhanced viewer functionality
+    let currentPlayer = null;
+    let isMuted = true;
+    
+    const player = document.getElementById('player');
+    const status = document.getElementById('status');
+    const reconnectBtn = document.getElementById('reconnect');
+    const muteBtn = document.getElementById('toggle-mute');
+    const fullscreenBtn = document.getElementById('fullscreen');
+    
+    function updateStatus(message, type = 'info') {
+      status.textContent = message;
+      status.className = `status ${type}`;
+    }
+    
+    function setPlayer(playerInstance) {
+      currentPlayer = playerInstance;
+    }
+    
+    function toggleMute() {
+      isMuted = !isMuted;
+      player.muted = isMuted;
+      muteBtn.textContent = isMuted ? 'Unmute' : 'Mute';
+    }
+    
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        player.requestFullscreen().catch(err => {
+          console.error('Error attempting to enable fullscreen:', err);
+        });
+      } else {
+        document.exitFullscreen();
+      }
+    }
+    
+    // Event listeners
+    reconnectBtn.addEventListener('click', () => {
+      updateStatus('Reconnecting...', 'info');
+      location.reload();
+    });
+    
+    muteBtn.addEventListener('click', toggleMute);
+    fullscreenBtn.addEventListener('click', toggleFullscreen);
+    
+    // Player event listeners
+    player.addEventListener('loadstart', () => {
+      updateStatus('Loading stream...', 'info');
+    });
+    
+    player.addEventListener('canplay', () => {
+      updateStatus('Stream connected successfully', 'connected');
+    });
+    
+    player.addEventListener('error', (e) => {
+      updateStatus(`Stream error: ${e.message || 'Unknown error'}`, 'error');
+    });
+    
+    player.addEventListener('waiting', () => {
+      updateStatus('Buffering...', 'info');
+    });
+    
+    player.addEventListener('playing', () => {
+      updateStatus('Stream playing', 'connected');
+    });
+    
+    // Fullscreen change handler
+    document.addEventListener('fullscreenchange', () => {
+      fullscreenBtn.textContent = document.fullscreenElement ? 'Exit Fullscreen' : 'Fullscreen';
+    });
+    
+    // Initialize
+    updateStatus('Initializing player...', 'info');
+  </script>
+</body>
+</html>

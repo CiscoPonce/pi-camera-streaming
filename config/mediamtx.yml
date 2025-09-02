@@ -1,0 +1,115 @@
+# MediaMTX Configuration for Pi Camera Streaming
+# Alternative to SRS for streaming
+
+# General settings
+logLevel: info
+logDestinations: [stdout]
+logFile: mediamtx.log
+
+# API
+api: yes
+apiAddress: 0.0.0.0:9997
+
+# Metrics
+metrics: yes
+metricsAddress: 0.0.0.0:9998
+
+# PPROF (for debugging)
+pprof: no
+pprofAddress: 0.0.0.0:9999
+
+# Command line
+runOnInit: ""
+runOnInitRestart: no
+
+# RTSP
+rtsp: yes
+rtspAddress: :8554
+rtspEncryption: "no"
+rtspServerKey: server.key
+rtspServerCert: server.crt
+rtspAuthMethods: [basic, digest]
+rtspEncryption: "no"
+
+# RTP
+rtpAddress: :8000
+rtpEncryption: "no"
+rtpServerKey: server.key
+rtpServerCert: server.crt
+
+# RTCP
+rtcpAddress: :8001
+
+# WebRTC
+webrtc: yes
+webrtcAddress: :8889
+webrtcEncryption: no
+webrtcServerKey: server.key
+webrtcServerCert: server.crt
+webrtcAllowOrigin: "*"
+
+# HLS
+hls: yes
+hlsAddress: :8888
+hlsEncryption: no
+hlsServerKey: server.key
+hlsServerCert: server.crt
+hlsAlwaysRemux: yes
+hlsVariant: lowLatency
+hlsSegmentCount: 3
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+hlsSegmentMaxSize: 50M
+
+# WebRTC settings for low latency
+webrtcLocalUdpAddress: :8889
+webrtcLocalTcpAddress: :8889
+webrtcIPsFromInterfaces: yes
+webrtcIPsFromInterfacesList: [eth0, wlan0]
+
+# Paths configuration
+paths:
+  cam:
+    source: publisher
+    sourceProtocol: automatic
+    sourceAnyPortEnable: no
+    sourceFingerprint: ""
+    sourceOnDemand: no
+    sourceOnDemandStartTimeout: 10s
+    sourceOnDemandCloseAfter: 10s
+    sourceRedirect: ""
+    disablePublisherOverride: no
+    fallback: ""
+    
+    # RTSP
+    runOnInit: ""
+    runOnInitRestart: no
+    runOnDemand: ""
+    runOnDemandRestart: no
+    runOnDemandStartTimeout: 10s
+    runOnDemandCloseAfter: 10s
+    runOnRead: ""
+    runOnReadRestart: no
+    runOnUnread: ""
+    
+    # Authentication
+    publishUser: ""
+    publishPass: ""
+    publishIPs: []
+    readUser: ""
+    readPass: ""
+    readIPs: []
+    
+    # Recording
+    record: no
+    recordPath: ./recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+    recordFormat: mp4
+    recordPartDuration: 1h
+    recordSegmentDuration: 1h
+    recordDeleteAfter: 24h
+    
+    # Performance
+    readTimeout: 10s
+    writeTimeout: 10s
+    readBufferCount: 2048
+    udpMaxPayloadSize: 1472

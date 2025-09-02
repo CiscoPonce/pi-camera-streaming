@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  srs:
+    image: ossrs/srs:5
+    container_name: srs
+    restart: unless-stopped
+    ports:
+      - "1935:1935"   # RTMP
+      - "1985:1985"   # API
+      - "8081:8080"   # HTTP console/play API
+      - "8000-8100:8000-8100/udp" # WebRTC ICE
+    volumes:
+      - ./config/srs.conf:/usr/local/srs/conf/srs.conf:ro
+    # For WAN WebRTC, set CANDIDATE to your public IP or DNS
+    # environment:
+    #   - CANDIDATE=${PUBLIC_IP_OR_DNS}
+    # Note: SRS will use default configuration if custom config fails
+
+  cam-viewer:
+    image: nginx:alpine
+    container_name: cam-viewer
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./viewer:/usr/share/nginx/html:ro
+      - ./config/nginx.conf:/etc/nginx/nginx.conf:ro
+
+  # Optional: MediaMTX as alternative to SRS
+  # Uncomment to use MediaMTX instead of SRS
+  # mediamtx:
+  #   image: bluenviron/mediamtx:latest
+  #   container_name: mediamtx
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8554:8554"   # RTSP
+  #     - "8888:8888"   # HTTP
+  #     - "8889:8889"   # WebRTC
+  #   volumes:
+  #     - ./config/mediamtx.yml:/mediamtx.yml:ro
+  #   environment:
+  #     - MTX_CONF=/mediamtx.yml
