@@ -195,7 +195,8 @@ start_streaming() {
         libav_cmd+=" --nopreview"
         # Keep AWB default; omit explicit --awb to match prior script
         libav_cmd+=" --codec libav"
-        libav_cmd+=" --libav-video-codec h264_v4l2m2m"
+        # Prefer software x264 to avoid V4L2 encoder broken-pipe issues
+        libav_cmd+=" --libav-video-codec libx264"
         local maxrate=${L_BITRATE}
         local bufsize=$((${L_BITRATE} * 2))
         libav_cmd+=" --libav-video-codec-opts \"bf=0;g=${L_GOP};profile=high;level=4.1;b=${L_BITRATE};maxrate=${maxrate};bufsize=${bufsize}\""
