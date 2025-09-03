@@ -178,28 +178,14 @@ start_streaming() {
     
     # Prefer direct libav pipeline if supported (proven working on this Pi)
     if supports_libav; then
-        # Build a clean libav pipeline (use previously proven stable settings)
+        # EXACT previous working approach (matches /home/ciscopi/bin/publish_cam.sh)
         local libav_cmd="rpicam-vid"
-        # Force stable 720p60 profile that was known to work
-        local L_WIDTH=1280
-        local L_HEIGHT=720
-        local L_FPS=60
-        local L_BITRATE=12000000
-        local L_GOP=120
-        libav_cmd+=" --width ${L_WIDTH}"
-        libav_cmd+=" --height ${L_HEIGHT}"
-        libav_cmd+=" --framerate ${L_FPS}"
-        libav_cmd+=" --timeout 0"
-        libav_cmd+=" -g ${L_GOP}"
-        libav_cmd+=" -b ${L_BITRATE}"
-        libav_cmd+=" --nopreview"
-        # Keep AWB default; omit explicit --awb to match prior script
-        libav_cmd+=" --codec libav"
-        # Prefer software x264 to avoid V4L2 encoder broken-pipe issues
-        libav_cmd+=" --libav-video-codec libx264"
-        local maxrate=${L_BITRATE}
-        local bufsize=$((${L_BITRATE} * 2))
-        libav_cmd+=" --libav-video-codec-opts \"bf=0;g=${L_GOP};profile=high;level=4.1;b=${L_BITRATE};maxrate=${maxrate};bufsize=${bufsize}\""
+        libav_cmd+=" -t 0 --nopreview"
+        libav_cmd+=" --width 1280 --height 720"
+        libav_cmd+=" --framerate 60 -g 120 -b 12000000"
+        libav_cmd+=" --autofocus-mode continuous --autofocus-range normal --autofocus-speed normal"
+        libav_cmd+=" --codec libav --libav-video-codec h264_v4l2m2m"
+        libav_cmd+=" --libav-video-codec-opts \"bf=0;g=120;profile=high;level=4.1;b=12M;maxrate=12M;bufsize=24M\""
         libav_cmd+=" --libav-format flv"
         libav_cmd+=" -o rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
         cmd="$libav_cmd"
