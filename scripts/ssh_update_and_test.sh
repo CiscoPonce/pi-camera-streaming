@@ -60,7 +60,7 @@ timeout 10s bash "$REPO_DIR/scripts/start-camera.sh" 2>&1 || true
 systemctl --user start pipewire wireplumber 2>/dev/null || true
 
 REMOTE
-' 
+
 
 echo "[INFO] Gathering a brief status ..." >&2
 
