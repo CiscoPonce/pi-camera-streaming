@@ -132,6 +132,14 @@ apply_profile() {
     esac
 }
 
+# Detect if rpicam-vid has libav support
+supports_libav() {
+    if rpicam-vid --help 2>/dev/null | grep -q -- "--libav-format"; then
+        return 0
+    fi
+    return 1
+}
+
 # Start camera streaming
 start_streaming() {
     local profile=$1
@@ -169,11 +177,22 @@ start_streaming() {
     cmd="$cmd --mode 1640:1232:12:U"  # 4:3 mode for better quality
     cmd="$cmd --awb auto"
     
-    # Encode as H.264 and pipe raw bitstream to ffmpeg
-    cmd="$cmd --codec h264 --nopreview"
-    
-    # Stream to SRS via ffmpeg, re-encode for robustness
-    cmd="$cmd | ffmpeg -probesize 10M -analyzeduration 10M -fflags +genpts+nobuffer -use_wallclock_as_timestamps 1 -thread_queue_size 1024 -f h264 -i - -c:v libx264 -preset veryfast -tune zerolatency -profile:v baseline -level 3.1 -b:v ${BITRATE} -pix_fmt yuv420p -g ${GOP} -force_key_frames expr:gte(t\\,n_forced*${GOP}/${FPS}) -f flv rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
+    # Prefer direct libav pipeline if supported (proven working on this Pi)
+    if supports_libav; then
+        cmd="$cmd --nopreview"
+        cmd="$cmd --codec libav"
+        cmd="$cmd --libav-video-codec h264_v4l2m2m"
+        # Map current settings to libav codec opts
+        local maxrate=$BITRATE
+        local bufsize=$(($BITRATE * 2))
+        cmd="$cmd --libav-video-codec-opts \"bf=0;g=${GOP};profile=high;level=4.1;b=${BITRATE};maxrate=${maxrate};bufsize=${bufsize}\""
+        cmd="$cmd --libav-format flv"
+        cmd="$cmd -o rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
+    else
+        # Fallback: raw H.264 piped to ffmpeg re-encode for robustness
+        cmd="$cmd --codec h264 --nopreview"
+        cmd="$cmd | ffmpeg -probesize 10M -analyzeduration 10M -fflags +genpts+nobuffer -use_wallclock_as_timestamps 1 -thread_queue_size 1024 -f h264 -i - -c:v libx264 -preset veryfast -tune zerolatency -profile:v baseline -level 3.1 -b:v ${BITRATE} -pix_fmt yuv420p -g ${GOP} -force_key_frames expr:gte(t\\,n_forced*${GOP}/${FPS}) -f flv rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
+    fi
     
     log "Executing: $cmd"
     
