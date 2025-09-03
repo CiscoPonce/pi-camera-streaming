@@ -155,7 +155,8 @@ start_streaming() {
     cmd="$cmd --codec h264"
     
     # Stream to SRS via ffmpeg (ingest raw H.264 and remux to FLV)
-    cmd="$cmd | ffmpeg -f h264 -fflags +genpts -i - -c:v copy -f flv rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
+    # Increase probe/analyze in case initial SPS/PPS is delayed
+    cmd="$cmd | ffmpeg -probesize 5M -analyzeduration 5M -f h264 -fflags +genpts -i - -c:v copy -f flv rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
     
     log "Executing: $cmd"
     
