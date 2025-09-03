@@ -183,6 +183,8 @@ start_streaming() {
         libav_cmd+=" --width $WIDTH"
         libav_cmd+=" --height $HEIGHT"
         libav_cmd+=" --framerate $FPS"
+        libav_cmd+=" --timeout 0"
+        libav_cmd+=" --inline"
         libav_cmd+=" -g $GOP"
         libav_cmd+=" -b $BITRATE"
         libav_cmd+=" --nopreview"
