@@ -144,6 +144,9 @@ start_streaming() {
         sleep 1
     fi
 
+    # Stop PipeWire stack to avoid holding /dev/media* on desktop
+    systemctl --user stop pipewire wireplumber 2>/dev/null || true
+
     log "Starting camera stream..."
     log "Resolution: ${WIDTH}x${HEIGHT}"
     log "Framerate: ${FPS} fps"
@@ -169,9 +172,8 @@ start_streaming() {
     # Encode as H.264 and pipe raw bitstream to ffmpeg
     cmd="$cmd --codec h264 --nopreview"
     
-    # Stream to SRS via ffmpeg (ingest raw H.264 and remux to FLV)
-    # Increase probe/analyze in case initial SPS/PPS is delayed
-    cmd="$cmd | ffmpeg -probesize 5M -analyzeduration 5M -f h264 -fflags +genpts -i - -c:v copy -f flv rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
+    # Stream to SRS via ffmpeg, re-encode for robustness
+    cmd="$cmd | ffmpeg -probesize 10M -analyzeduration 10M -fflags +genpts+nobuffer -use_wallclock_as_timestamps 1 -thread_queue_size 1024 -f h264 -i - -c:v libx264 -preset veryfast -tune zerolatency -profile:v baseline -level 3.1 -b:v ${BITRATE} -pix_fmt yuv420p -g ${GOP} -force_key_frames expr:gte(t\\,n_forced*${GOP}/${FPS}) -f flv rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
     
     log "Executing: $cmd"
     
@@ -184,6 +186,8 @@ cleanup() {
     log "Stopping camera stream..."
     pkill -f rpicam-vid || true
     pkill -f ffmpeg || true
+    # Restore desktop services
+    systemctl --user start pipewire wireplumber 2>/dev/null || true
     success "Camera stream stopped"
     exit 0
 }
