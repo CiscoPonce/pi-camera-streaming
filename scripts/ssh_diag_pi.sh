@@ -117,12 +117,18 @@ fi
 # Apply fixes if requested
 if [ "$APPLY_FIX" -eq 1 ]; then
   echo "\n[INFO] Applying fixes on $TARGET ..." >&2
-  remote "RUN_STREAM_FLAG=$RUN_STREAM REMOTE_REPO_DIR=/home/cisco/pi-camera-streaming bash -s" <<'REMOTE_FIX'
+  remote "RUN_STREAM_FLAG=$RUN_STREAM bash -s" <<'REMOTE_FIX'
 set -euo pipefail
 
 # 1) Kill camera-holding processes
 if pgrep -a -f "rpicam|libcamera|v4l2|mediamtx|motion|ffmpeg" >/dev/null 2>&1; then
   pkill -f 'rpicam|libcamera|v4l2|mediamtx|motion|ffmpeg' || true
+  sleep 1
+fi
+
+# If still busy, try stopping PipeWire services (desktop only)
+if pgrep -f "rpicam|libcamera|v4l2|mediamtx|motion|ffmpeg" >/dev/null 2>&1; then
+  systemctl --user stop wireplumber pipewire 2>/dev/null || true
   sleep 1
 fi
 
@@ -134,6 +140,7 @@ fi
 curl -sSf --connect-timeout 2 --max-time 4 http://localhost:1985/api/v1/summaries >/dev/null 2>&1 || true
 
 # 3) Update repo and ensure script executable
+REMOTE_REPO_DIR="$HOME/pi-camera-streaming"
 if [ -d "$REMOTE_REPO_DIR/.git" ]; then
   git -C "$REMOTE_REPO_DIR" pull --ff-only || true
   chmod +x "$REMOTE_REPO_DIR/scripts/start-camera.sh" || true
