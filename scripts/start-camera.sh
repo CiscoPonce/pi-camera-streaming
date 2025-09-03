@@ -171,7 +171,6 @@ start_streaming() {
     cmd="$cmd --inline"
     cmd="$cmd --intra $GOP"
     cmd="$cmd --timeout 0"
-    cmd="$cmd --output -"
     
     # Add camera-specific optimizations for Pi 5
     cmd="$cmd --mode 1640:1232:12:U"  # 4:3 mode for better quality
@@ -191,6 +190,7 @@ start_streaming() {
     else
         # Fallback: raw H.264 piped to ffmpeg re-encode for robustness
         cmd="$cmd --codec h264 --nopreview"
+        cmd="$cmd --output -"
         cmd="$cmd | ffmpeg -probesize 10M -analyzeduration 10M -fflags +genpts+nobuffer -use_wallclock_as_timestamps 1 -thread_queue_size 1024 -f h264 -i - -c:v libx264 -preset veryfast -tune zerolatency -profile:v baseline -level 3.1 -b:v ${BITRATE} -pix_fmt yuv420p -g ${GOP} -force_key_frames expr:gte(t\\,n_forced*${GOP}/${FPS}) -f flv rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
     fi
     
