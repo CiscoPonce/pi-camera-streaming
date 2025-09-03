@@ -132,6 +132,24 @@ if pgrep -f "rpicam|libcamera|v4l2|mediamtx|motion|ffmpeg" >/dev/null 2>&1; then
   sleep 1
 fi
 
+# If rpicam-vid persists, kill its parent process tree and any matching user services
+if pgrep -x rpicam-vid >/dev/null 2>&1; then
+  for pid in $(pgrep -x rpicam-vid); do
+    ppid=$(ps -o ppid= -p "$pid" | tr -d ' ' || true)
+    if [ -n "$ppid" ]; then
+      kill -TERM "$pid" "$ppid" 2>/dev/null || true
+      sleep 1
+      kill -KILL "$pid" "$ppid" 2>/dev/null || true
+    else
+      kill -TERM "$pid" 2>/dev/null || true
+      sleep 1
+      kill -KILL "$pid" 2>/dev/null || true
+    fi
+  done
+  # Stop potential user services named like rpicam/libcamera if present
+  systemctl --user list-units --type=service --all 2>/dev/null | awk '/rpicam|libcamera/ {print $1}' | xargs -r -n1 systemctl --user stop 2>/dev/null || true
+fi
+
 # 2) Restart SRS and verify API
 if command -v docker >/dev/null 2>&1; then
   docker restart srs >/dev/null 2>&1 || true
@@ -139,10 +157,11 @@ if command -v docker >/dev/null 2>&1; then
 fi
 curl -sSf --connect-timeout 2 --max-time 4 http://localhost:1985/api/v1/summaries >/dev/null 2>&1 || true
 
-# 3) Update repo and ensure script executable
+# 3) Update repo and ensure script executable (force reset to origin/main)
 REMOTE_REPO_DIR="$HOME/pi-camera-streaming"
 if [ -d "$REMOTE_REPO_DIR/.git" ]; then
-  git -C "$REMOTE_REPO_DIR" pull --ff-only || true
+  git -C "$REMOTE_REPO_DIR" fetch --all --prune || true
+  git -C "$REMOTE_REPO_DIR" reset --hard origin/main || true
   chmod +x "$REMOTE_REPO_DIR/scripts/start-camera.sh" || true
 fi
 
