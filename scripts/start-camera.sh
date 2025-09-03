@@ -150,8 +150,6 @@ start_streaming() {
     # Add camera-specific optimizations for Pi 5
     cmd="$cmd --mode 1640:1232:12:U"  # 4:3 mode for better quality
     cmd="$cmd --awb auto"
-    cmd="$cmd --exposure auto"
-    cmd="$cmd --gain auto"
     
     # Encode as H.264 and pipe raw bitstream to ffmpeg
     cmd="$cmd --codec h264"
