@@ -73,9 +73,16 @@ check_srs() {
     
     # Use short timeouts so we don't hang if SRS is slow/unreachable
     if ! curl -sSf --connect-timeout 2 --max-time 4 "http://${SRS_HOST}:1985/api/v1/summaries" > /dev/null; then
-        error "SRS server not responding. Please start it with:"
-        error "docker-compose up -d srs"
-        exit 1
+        warning "SRS API did not respond, attempting docker restart ..."
+        if command -v docker >/dev/null 2>&1; then
+            docker restart srs >/dev/null 2>&1 || true
+            sleep 3
+        fi
+        if ! curl -sSf --connect-timeout 2 --max-time 4 "http://${SRS_HOST}:1985/api/v1/summaries" > /dev/null; then
+            error "SRS server not responding. Please start it with:"
+            error "docker compose up -d srs"
+            exit 1
+        fi
     fi
     
     success "SRS server is running"
@@ -130,6 +137,13 @@ start_streaming() {
     local profile=$1
     apply_profile $profile
     
+    # Proactively free the camera if held by previous processes
+    if pgrep -a -f "rpicam|libcamera|v4l2|mediamtx|motion|ffmpeg" >/dev/null 2>&1; then
+        warning "Killing processes that may hold the camera (rpicam/libcamera/ffmpeg/mediamtx/motion)"
+        pkill -f 'rpicam|libcamera|v4l2|mediamtx|motion|ffmpeg' || true
+        sleep 1
+    fi
+
     log "Starting camera stream..."
     log "Resolution: ${WIDTH}x${HEIGHT}"
     log "Framerate: ${FPS} fps"
@@ -153,7 +167,7 @@ start_streaming() {
     cmd="$cmd --awb auto"
     
     # Encode as H.264 and pipe raw bitstream to ffmpeg
-    cmd="$cmd --codec h264"
+    cmd="$cmd --codec h264 --nopreview"
     
     # Stream to SRS via ffmpeg (ingest raw H.264 and remux to FLV)
     # Increase probe/analyze in case initial SPS/PPS is delayed
