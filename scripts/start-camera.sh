@@ -199,8 +199,27 @@ start_streaming() {
     
     log "Executing: $cmd"
     
-    # Execute the command
+    # Execute the command; on failure, retry with safer settings or fallback
+    set +e
     eval $cmd
+    exit_code=$?
+    set -e
+
+    if [ $exit_code -ne 0 ] && supports_libav; then
+        warning "Primary libav pipeline failed (code $exit_code). Retrying at 720p30, 6Mbps..."
+        local retry_cmd="rpicam-vid -t 0 --nopreview --width 1280 --height 720 --framerate 30 -g 60 -b 6000000 --autofocus-mode continuous --autofocus-range normal --autofocus-speed normal --codec libav --libav-video-codec h264_v4l2m2m --libav-video-codec-opts \"bf=0;g=60;profile=high;level=4.1;b=6M;maxrate=6M;bufsize=12M\" --libav-format flv -o rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
+        log "Executing: $retry_cmd"
+        set +e
+        eval $retry_cmd
+        retry_code=$?
+        set -e
+        if [ $retry_code -ne 0 ]; then
+            warning "Libav retry failed (code $retry_code). Falling back to ffmpeg re-encode path."
+            local ffmpeg_cmd="rpicam-vid --width $WIDTH --height $HEIGHT --framerate $FPS --bitrate $BITRATE --inline --intra $GOP --timeout 0 --mode 1640:1232:12:U --awb auto --codec h264 --nopreview --output - | ffmpeg -probesize 10M -analyzeduration 10M -fflags +genpts+nobuffer -use_wallclock_as_timestamps 1 -thread_queue_size 1024 -f h264 -i - -c:v libx264 -preset veryfast -tune zerolatency -profile:v baseline -level 3.1 -b:v ${BITRATE} -pix_fmt yuv420p -g ${GOP} -force_key_frames expr:gte(t\\,n_forced*${GOP}/${FPS}) -f flv rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
+            log "Executing: $ffmpeg_cmd"
+            eval $ffmpeg_cmd
+        fi
+    fi
 }
 
 # Signal handler for cleanup
