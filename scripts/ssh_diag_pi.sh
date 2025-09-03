@@ -117,7 +117,7 @@ fi
 # Apply fixes if requested
 if [ "$APPLY_FIX" -eq 1 ]; then
   echo "\n[INFO] Applying fixes on $TARGET ..." >&2
-  remote 'bash -s' <<'REMOTE_FIX'
+  remote bash -s <<REMOTE_FIX
 set -euo pipefail
 
 # 1) Kill camera-holding processes
@@ -141,7 +141,8 @@ if [ -d "$REMOTE_REPO_DIR/.git" ]; then
 fi
 
 # 4) Optionally run streaming script
-if [ "$RUN_STREAM" -eq 1 ]; then
+RUN_STREAM_FLAG=${RUN_STREAM}
+if [ "${RUN_STREAM_FLAG}" -eq 1 ]; then
   bash "$REMOTE_REPO_DIR/scripts/start-camera.sh" || true
 fi
 REMOTE_FIX
