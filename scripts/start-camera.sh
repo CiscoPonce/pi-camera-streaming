@@ -143,7 +143,7 @@ start_streaming() {
     cmd="$cmd --framerate $FPS"
     cmd="$cmd --bitrate $BITRATE"
     cmd="$cmd --inline"
-    cmd="$cmd --keyframe $GOP"
+    cmd="$cmd --intra $GOP"
     cmd="$cmd --timeout 0"
     cmd="$cmd --output -"
     
@@ -153,15 +153,11 @@ start_streaming() {
     cmd="$cmd --exposure auto"
     cmd="$cmd --gain auto"
     
-    # Add libav encoding
+    # Encode as H.264 and pipe raw bitstream to ffmpeg
     cmd="$cmd --codec h264"
-    cmd="$cmd --libav-format flv"
-    cmd="$cmd --libav-video-codec libx264"
-    cmd="$cmd --libav-video-bitrate $BITRATE"
-    cmd="$cmd --libav-video-extra 'preset=ultrafast,tune=zerolatency,profile=baseline,level=3.1'"
     
-    # Stream to SRS
-    cmd="$cmd | ffmpeg -f flv -i - -c copy -f flv rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
+    # Stream to SRS via ffmpeg (ingest raw H.264 and remux to FLV)
+    cmd="$cmd | ffmpeg -f h264 -fflags +genpts -i - -c:v copy -f flv rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
     
     log "Executing: $cmd"
     
