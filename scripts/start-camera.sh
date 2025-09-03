@@ -71,7 +71,8 @@ check_camera() {
 check_srs() {
     log "Checking SRS server..."
     
-    if ! curl -s "http://${SRS_HOST}:1985/api/v1/summaries" &> /dev/null; then
+    # Use short timeouts so we don't hang if SRS is slow/unreachable
+    if ! curl -sSf --connect-timeout 2 --max-time 4 "http://${SRS_HOST}:1985/api/v1/summaries" > /dev/null; then
         error "SRS server not responding. Please start it with:"
         error "docker-compose up -d srs"
         exit 1
