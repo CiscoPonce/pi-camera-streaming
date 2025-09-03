@@ -178,17 +178,26 @@ start_streaming() {
     
     # Prefer direct libav pipeline if supported (proven working on this Pi)
     if supports_libav; then
-        cmd="$cmd --nopreview"
-        cmd="$cmd --codec libav"
-        cmd="$cmd --libav-video-codec h264_v4l2m2m"
-        # Map current settings to libav codec opts
+        # Build a clean libav pipeline (matches working previous project)
+        local libav_cmd="rpicam-vid"
+        libav_cmd+=" --width $WIDTH"
+        libav_cmd+=" --height $HEIGHT"
+        libav_cmd+=" --framerate $FPS"
+        libav_cmd+=" -g $GOP"
+        libav_cmd+=" -b $BITRATE"
+        libav_cmd+=" --nopreview"
+        libav_cmd+=" --awb auto"
+        libav_cmd+=" --codec libav"
+        libav_cmd+=" --libav-video-codec h264_v4l2m2m"
         local maxrate=$BITRATE
         local bufsize=$(($BITRATE * 2))
-        cmd="$cmd --libav-video-codec-opts \"bf=0;g=${GOP};profile=high;level=4.1;b=${BITRATE};maxrate=${maxrate};bufsize=${bufsize}\""
-        cmd="$cmd --libav-format flv"
-        cmd="$cmd -o rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
+        libav_cmd+=" --libav-video-codec-opts \"bf=0;g=${GOP};profile=high;level=4.1;b=${BITRATE};maxrate=${maxrate};bufsize=${bufsize}\""
+        libav_cmd+=" --libav-format flv"
+        libav_cmd+=" -o rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
+        cmd="$libav_cmd"
     else
         # Fallback: raw H.264 piped to ffmpeg re-encode for robustness
+        # Keep tuned sensor mode and intra settings here only
         cmd="$cmd --codec h264 --nopreview"
         cmd="$cmd --output -"
         cmd="$cmd | ffmpeg -probesize 10M -analyzeduration 10M -fflags +genpts+nobuffer -use_wallclock_as_timestamps 1 -thread_queue_size 1024 -f h264 -i - -c:v libx264 -preset veryfast -tune zerolatency -profile:v baseline -level 3.1 -b:v ${BITRATE} -pix_fmt yuv420p -g ${GOP} -force_key_frames expr:gte(t\\,n_forced*${GOP}/${FPS}) -f flv rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
