@@ -117,7 +117,7 @@ fi
 # Apply fixes if requested
 if [ "$APPLY_FIX" -eq 1 ]; then
   echo "\n[INFO] Applying fixes on $TARGET ..." >&2
-  remote bash -s <<REMOTE_FIX
+  remote "RUN_STREAM_FLAG=$RUN_STREAM REMOTE_REPO_DIR=/home/cisco/pi-camera-streaming bash -s" <<'REMOTE_FIX'
 set -euo pipefail
 
 # 1) Kill camera-holding processes
@@ -134,14 +134,12 @@ fi
 curl -sSf --connect-timeout 2 --max-time 4 http://localhost:1985/api/v1/summaries >/dev/null 2>&1 || true
 
 # 3) Update repo and ensure script executable
-REMOTE_REPO_DIR="/home/cisco/pi-camera-streaming"
 if [ -d "$REMOTE_REPO_DIR/.git" ]; then
   git -C "$REMOTE_REPO_DIR" pull --ff-only || true
   chmod +x "$REMOTE_REPO_DIR/scripts/start-camera.sh" || true
 fi
 
 # 4) Optionally run streaming script
-RUN_STREAM_FLAG=${RUN_STREAM}
 if [ "${RUN_STREAM_FLAG}" -eq 1 ]; then
   bash "$REMOTE_REPO_DIR/scripts/start-camera.sh" || true
 fi
