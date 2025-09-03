@@ -178,22 +178,27 @@ start_streaming() {
     
     # Prefer direct libav pipeline if supported (proven working on this Pi)
     if supports_libav; then
-        # Build a clean libav pipeline (matches working previous project)
+        # Build a clean libav pipeline (use previously proven stable settings)
         local libav_cmd="rpicam-vid"
-        libav_cmd+=" --width $WIDTH"
-        libav_cmd+=" --height $HEIGHT"
-        libav_cmd+=" --framerate $FPS"
+        # Force stable 720p60 profile that was known to work
+        local L_WIDTH=1280
+        local L_HEIGHT=720
+        local L_FPS=60
+        local L_BITRATE=12000000
+        local L_GOP=120
+        libav_cmd+=" --width ${L_WIDTH}"
+        libav_cmd+=" --height ${L_HEIGHT}"
+        libav_cmd+=" --framerate ${L_FPS}"
         libav_cmd+=" --timeout 0"
-        libav_cmd+=" --inline"
-        libav_cmd+=" -g $GOP"
-        libav_cmd+=" -b $BITRATE"
+        libav_cmd+=" -g ${L_GOP}"
+        libav_cmd+=" -b ${L_BITRATE}"
         libav_cmd+=" --nopreview"
-        libav_cmd+=" --awb auto"
+        # Keep AWB default; omit explicit --awb to match prior script
         libav_cmd+=" --codec libav"
         libav_cmd+=" --libav-video-codec h264_v4l2m2m"
-        local maxrate=$BITRATE
-        local bufsize=$(($BITRATE * 2))
-        libav_cmd+=" --libav-video-codec-opts \"bf=0;g=${GOP};profile=high;level=4.1;b=${BITRATE};maxrate=${maxrate};bufsize=${bufsize}\""
+        local maxrate=${L_BITRATE}
+        local bufsize=$((${L_BITRATE} * 2))
+        libav_cmd+=" --libav-video-codec-opts \"bf=0;g=${L_GOP};profile=high;level=4.1;b=${L_BITRATE};maxrate=${maxrate};bufsize=${bufsize}\""
         libav_cmd+=" --libav-format flv"
         libav_cmd+=" -o rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
         cmd="$libav_cmd"
