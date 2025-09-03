@@ -1,17 +1,32 @@
 #!/usr/bin/env bash
 
-# SSH diagnostics for Pi camera + SRS
+# SSH diagnostics and optional remediation for Pi camera + SRS
 # Usage:
-#   scripts/ssh_diag_pi.sh [user@host]  # default: ciscopi@192.168.1.18
+#   scripts/ssh_diag_pi.sh [user@host] [--fix] [--run]
+#     user@host: SSH target (default: ciscopi@192.168.1.18)
+#     --fix:     Apply fixes (kill camera holders, restart SRS, git pull repo)
+#     --run:     After fixes, run start-camera.sh on the Pi
 #
-# Returns a summary of:
-# - SRS API health (1985)
-# - SRS listening ports
+# Checks:
+# - SRS API health (1985) and listening ports
 # - Camera blockers (rpicam/libcamera/ffmpeg/etc) and device users (pipewire)
 
 set -euo pipefail
 
-TARGET="${1:-ciscopi@192.168.1.18}"
+# Defaults
+TARGET="ciscopi@192.168.1.18"
+APPLY_FIX=0
+RUN_STREAM=0
+
+# Parse args
+for arg in "$@"; do
+  case "$arg" in
+    --fix) APPLY_FIX=1 ;;
+    --run) RUN_STREAM=1 ;;
+    *@*) TARGET="$arg" ;;
+    *) ;; # ignore unknown
+  esac
+done
 
 remote() {
   ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new "$TARGET" "$@"
@@ -97,6 +112,39 @@ echo "- Camera busy:               $([ "$CAM_BUSY" = "1" ] && echo YES || echo N
 echo "- PipeWire holds camera:     $([ "$PIPEWIRE_BUSY" = "1" ] && echo YES || echo NO)"
 if [ -n "$BUSY_PIDS" ]; then
   echo "- Busy PIDs:                 $BUSY_PIDS"
+fi
+
+# Apply fixes if requested
+if [ "$APPLY_FIX" -eq 1 ]; then
+  echo "\n[INFO] Applying fixes on $TARGET ..." >&2
+  remote 'bash -s' <<'REMOTE_FIX'
+set -euo pipefail
+
+# 1) Kill camera-holding processes
+if pgrep -a -f "rpicam|libcamera|v4l2|mediamtx|motion|ffmpeg" >/dev/null 2>&1; then
+  pkill -f 'rpicam|libcamera|v4l2|mediamtx|motion|ffmpeg' || true
+  sleep 1
+fi
+
+# 2) Restart SRS and verify API
+if command -v docker >/dev/null 2>&1; then
+  docker restart srs >/dev/null 2>&1 || true
+  sleep 3
+fi
+curl -sSf --connect-timeout 2 --max-time 4 http://localhost:1985/api/v1/summaries >/dev/null 2>&1 || true
+
+# 3) Update repo and ensure script executable
+REMOTE_REPO_DIR="/home/cisco/pi-camera-streaming"
+if [ -d "$REMOTE_REPO_DIR/.git" ]; then
+  git -C "$REMOTE_REPO_DIR" pull --ff-only || true
+  chmod +x "$REMOTE_REPO_DIR/scripts/start-camera.sh" || true
+fi
+
+# 4) Optionally run streaming script
+if [ "$RUN_STREAM" -eq 1 ]; then
+  bash "$REMOTE_REPO_DIR/scripts/start-camera.sh" || true
+fi
+REMOTE_FIX
 fi
 
 exit 0
