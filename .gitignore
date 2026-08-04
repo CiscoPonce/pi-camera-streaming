@@ -96,7 +96,12 @@ venv/
 detection_env/
 yolo_env/
 
-# Large ML models and cache files (>100MB)
+# Python Bytecode & ML Model Files
+__pycache__/
+*.pyc
+*.pt
+*.onnx
+*_openvino_model/
 /*.litertlm
 *.xnnpack_cache*
 *.bin

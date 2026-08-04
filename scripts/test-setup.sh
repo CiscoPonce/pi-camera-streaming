@@ -68,11 +68,18 @@ test_docker() {
 test_containers() {
     log "Testing containers..."
     
-    if docker-compose ps | grep -q "Up"; then
+    local ps_output=""
+    if command -v docker-compose &> /dev/null; then
+        ps_output=$(docker-compose ps 2>/dev/null)
+    elif docker compose version &> /dev/null; then
+        ps_output=$(docker compose ps 2>/dev/null)
+    fi
+
+    if echo "$ps_output" | grep -qi "Up\|running"; then
         success "Containers are running"
         return 0
     else
-        warning "Containers not running. Start with: docker-compose up -d"
+        warning "Containers not running. Start with: docker compose up -d"
         return 1
     fi
 }
@@ -108,7 +115,18 @@ test_network_ports() {
     local all_open=true
     
     for port in "${ports[@]}"; do
-        if netstat -tuln | grep -q ":$port "; then
+        local is_open=false
+        if command -v ss &> /dev/null; then
+            if ss -tuln | grep -q ":$port "; then
+                is_open=true
+            fi
+        elif command -v netstat &> /dev/null; then
+            if netstat -tuln | grep -q ":$port "; then
+                is_open=true
+            fi
+        fi
+
+        if $is_open; then
             log "Port $port is open"
         else
             warning "Port $port is not open"
@@ -160,25 +178,25 @@ main() {
     local total_tests=7
     
     # Run tests
-    test_camera && ((tests_passed++))
+    if test_camera; then tests_passed=$((tests_passed + 1)); fi
     echo
     
-    test_docker && ((tests_passed++))
+    if test_docker; then tests_passed=$((tests_passed + 1)); fi
     echo
     
-    test_containers && ((tests_passed++))
+    if test_containers; then tests_passed=$((tests_passed + 1)); fi
     echo
     
-    test_srs_api && ((tests_passed++))
+    if test_srs_api; then tests_passed=$((tests_passed + 1)); fi
     echo
     
-    test_web_viewer && ((tests_passed++))
+    if test_web_viewer; then tests_passed=$((tests_passed + 1)); fi
     echo
     
-    test_network_ports && ((tests_passed++))
+    if test_network_ports; then tests_passed=$((tests_passed + 1)); fi
     echo
     
-    test_system_resources && ((tests_passed++))
+    if test_system_resources; then tests_passed=$((tests_passed + 1)); fi
     echo
     
     # Summary

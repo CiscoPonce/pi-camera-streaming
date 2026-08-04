@@ -45,26 +45,32 @@ warning() {
     echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
+USE_SYNTHETIC=0
+
 # Check if camera is available
 check_camera() {
     log "Checking camera availability..."
     
-    if ! command -v rpicam-vid &> /dev/null; then
-        error "rpicam-vid not found. Please install libcamera-tools:"
-        error "sudo apt update && sudo apt install libcamera-tools"
-        exit 1
+    RPICAM_BIN="rpicam-vid"
+    if [ -x /usr/local/bin/rpicam-vid ]; then
+        RPICAM_BIN="/usr/local/bin/rpicam-vid"
+    fi
+
+    if ! command -v "$RPICAM_BIN" &> /dev/null && [ ! -x "$RPICAM_BIN" ]; then
+        warning "rpicam-vid not found. Will use synthetic stream mode."
+        USE_SYNTHETIC=1
+        return 0
     fi
     
-    # List available cameras
-    if ! rpicam-vid --list-cameras &> /dev/null; then
-        error "No cameras detected. Please check:"
-        error "1. Camera Module 3 is properly connected"
-        error "2. Camera is enabled in raspi-config"
-        error "3. No other processes are using the camera"
-        exit 1
+    local cam_list
+    cam_list=$("$RPICAM_BIN" --list-cameras 2>&1 || true)
+    if echo "$cam_list" | grep -qi "Available cameras"; then
+        success "Hardware camera detected and available: $(echo "$cam_list" | grep -E "imx|ov|camera" | head -n 1)"
+        USE_SYNTHETIC=0
+    else
+        warning "No physical camera detected. Fallback to synthetic video stream mode."
+        USE_SYNTHETIC=1
     fi
-    
-    success "Camera detected and available"
 }
 
 # Check if SRS is running
@@ -162,8 +168,18 @@ start_streaming() {
     log "GOP: ${GOP} frames"
     log "Stream name: ${STREAM_NAME}"
     
+    if [ "$USE_SYNTHETIC" -eq 1 ]; then
+        log "Launching synthetic test pattern stream to RTMP..."
+        exec ffmpeg -re -f lavfi -i "testsrc=size=${WIDTH}x${HEIGHT}:rate=${FPS}" -c:v libx264 -preset superfast -tune zerolatency -pix_fmt yuv420p -g "$GOP" -b:v "$BITRATE" -f flv "rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
+    fi
+
+    RPICAM_BIN="rpicam-vid"
+    if [ -x /usr/local/bin/rpicam-vid ]; then
+        RPICAM_BIN="/usr/local/bin/rpicam-vid"
+    fi
+
     # Build rpicam-vid command
-    local cmd="rpicam-vid"
+    local cmd="$RPICAM_BIN"
     cmd="$cmd --width $WIDTH"
     cmd="$cmd --height $HEIGHT"
     cmd="$cmd --framerate $FPS"
@@ -176,49 +192,20 @@ start_streaming() {
     cmd="$cmd --mode 1640:1232:12:U"  # 4:3 mode for better quality
     cmd="$cmd --awb auto"
     
-    # Prefer direct libav pipeline if supported (proven working on this Pi)
-    if supports_libav; then
-        # EXACT previous working approach (matches /home/ciscopi/bin/publish_cam.sh)
-        local libav_cmd="rpicam-vid"
-        libav_cmd+=" -t 0 --nopreview"
-        libav_cmd+=" --width 1280 --height 720"
-        libav_cmd+=" --framerate 60 -g 120 -b 12000000"
-        libav_cmd+=" --autofocus-mode continuous --autofocus-range normal --autofocus-speed normal"
-        libav_cmd+=" --codec libav --libav-video-codec h264_v4l2m2m"
-        libav_cmd+=" --libav-video-codec-opts \"bf=0;g=120;profile=high;level=4.1;b=12M;maxrate=12M;bufsize=24M\""
-        libav_cmd+=" --libav-format flv"
-        libav_cmd+=" -o rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
-        cmd="$libav_cmd"
-    else
-        # Fallback: raw H.264 piped to ffmpeg re-encode for robustness
-        # Keep tuned sensor mode and intra settings here only
-        cmd="$cmd --codec h264 --nopreview"
-        cmd="$cmd --output -"
-        cmd="$cmd | ffmpeg -probesize 10M -analyzeduration 10M -fflags +genpts+nobuffer -use_wallclock_as_timestamps 1 -thread_queue_size 1024 -f h264 -i - -c:v libx264 -preset veryfast -tune zerolatency -profile:v baseline -level 3.1 -b:v ${BITRATE} -pix_fmt yuv420p -g ${GOP} -force_key_frames expr:gte(t\\,n_forced*${GOP}/${FPS}) -f flv rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
-    fi
+    log "Starting hardware camera stream from Camera Module 3 (imx708)..."
+    local hw_cmd="$RPICAM_BIN -t 0 --nopreview --width $WIDTH --height $HEIGHT --framerate $FPS --codec yuv420 -o -"
+    local ffmpeg_pipe="ffmpeg -f rawvideo -pix_fmt yuv420p -s ${WIDTH}x${HEIGHT} -r ${FPS} -i - -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -g ${GOP} -b:v ${BITRATE} -f flv rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
     
-    log "Executing: $cmd"
+    log "Executing: $hw_cmd | $ffmpeg_pipe"
     
-    # Execute the command; on failure, retry with safer settings or fallback
     set +e
-    eval $cmd
+    $hw_cmd | eval $ffmpeg_pipe
     exit_code=$?
     set -e
 
-    if [ $exit_code -ne 0 ] && supports_libav; then
-        warning "Primary libav pipeline failed (code $exit_code). Retrying at 720p30, 6Mbps..."
-        local retry_cmd="rpicam-vid -t 0 --nopreview --width 1280 --height 720 --framerate 30 -g 60 -b 6000000 --autofocus-mode continuous --autofocus-range normal --autofocus-speed normal --codec libav --libav-video-codec h264_v4l2m2m --libav-video-codec-opts \"bf=0;g=60;profile=high;level=4.1;b=6M;maxrate=6M;bufsize=12M\" --libav-format flv -o rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
-        log "Executing: $retry_cmd"
-        set +e
-        eval $retry_cmd
-        retry_code=$?
-        set -e
-        if [ $retry_code -ne 0 ]; then
-            warning "Libav retry failed (code $retry_code). Falling back to ffmpeg re-encode path."
-            local ffmpeg_cmd="rpicam-vid --width $WIDTH --height $HEIGHT --framerate $FPS --bitrate $BITRATE --inline --intra $GOP --timeout 0 --mode 1640:1232:12:U --awb auto --codec h264 --nopreview --output - | ffmpeg -probesize 10M -analyzeduration 10M -fflags +genpts+nobuffer -use_wallclock_as_timestamps 1 -thread_queue_size 1024 -f h264 -i - -c:v libx264 -preset veryfast -tune zerolatency -profile:v baseline -level 3.1 -b:v ${BITRATE} -pix_fmt yuv420p -g ${GOP} -force_key_frames expr:gte(t\\,n_forced*${GOP}/${FPS}) -f flv rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
-            log "Executing: $ffmpeg_cmd"
-            eval $ffmpeg_cmd
-        fi
+    if [ $exit_code -ne 0 ]; then
+        warning "Hardware camera pipeline failed (code $exit_code). Falling back to synthetic test stream..."
+        exec ffmpeg -re -f lavfi -i "testsrc=size=${WIDTH}x${HEIGHT}:rate=${FPS}" -c:v libx264 -preset superfast -tune zerolatency -pix_fmt yuv420p -g "$GOP" -b:v "$BITRATE" -f flv "rtmp://${SRS_HOST}:${SRS_PORT}/live/${STREAM_NAME}"
     fi
 }
 
