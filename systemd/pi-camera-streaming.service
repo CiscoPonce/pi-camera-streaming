@@ -1,17 +1,12 @@
 [Unit]
-Description=Raspberry Pi 5 Camera Streaming & OpenVINO YOLO AI Service
-After=network.target docker.service
-Requires=docker.service
+Description=Raspberry Pi 5 Camera Streaming & OpenVINO YOLO AI Master Service
+Wants=pi-camera.service pi-yolo.service
+After=pi-camera.service pi-yolo.service
 
 [Service]
-Type=forking
-User=ubuntu
-WorkingDirectory=/home/ubuntu/pi-camera-streaming
-ExecStartPre=/usr/bin/docker compose up -d
-ExecStart=/bin/bash -c "/home/ubuntu/pi-camera-streaming/scripts/start-camera.sh --fps 30 & /usr/bin/python3 /home/ubuntu/pi-camera-streaming/ai_vision/yolo_service.py &"
-ExecStop=/bin/bash -c "pkill -f start-camera.sh; pkill -f rpicam-vid; pkill -f ffmpeg; pkill -f yolo_service.py; /usr/bin/docker compose down"
-Restart=always
-RestartSec=5
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
 
 [Install]
 WantedBy=multi-user.target

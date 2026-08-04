@@ -1,0 +1,15 @@
+[Unit]
+Description=Raspberry Pi 5 OpenVINO YOLO AI WebSocket Service
+After=network.target pi-camera.service
+Requires=pi-camera.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/pi-camera-streaming
+ExecStart=/usr/bin/python3 /home/ubuntu/pi-camera-streaming/ai_vision/yolo_service.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

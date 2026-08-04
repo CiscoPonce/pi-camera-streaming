@@ -137,6 +137,20 @@
     <canvas id="overlay"></canvas>
   </div>
   
+  <div class="profile-controls" style="margin-top: 16px; padding: 14px; background: #161b22; border-radius: 6px; border: 1px solid #30363d;">
+    <div style="font-weight: 600; font-size: 14px; margin-bottom: 10px; color: #e6ebf0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+      <span>Performance Profile / Day & Night Modes</span>
+      <span id="active-profile-badge" style="font-size: 12px; padding: 3px 10px; border-radius: 12px; background: #238636; color: #ffffff; font-family: monospace;">Active: 🤖 Auto (Day/Night)</span>
+    </div>
+    <div class="controls" style="margin-top: 0; display: flex; gap: 8px; flex-wrap: wrap;">
+      <button id="btn-profile-auto" class="prof-btn" onclick="selectProfile('auto')" style="border-color: #58a6ff; background: #1f2937;">🤖 Auto (Day/Night)</button>
+      <button id="btn-profile-day" class="prof-btn" onclick="selectProfile('day')">☀️ Day Mode (1080p25)</button>
+      <button id="btn-profile-night" class="prof-btn" onclick="selectProfile('night')">🌙 Night Mode (720p30)</button>
+      <button id="btn-profile-low-latency" class="prof-btn" onclick="selectProfile('low-latency')">⚡ Low Latency (720p60)</button>
+    </div>
+    <div id="profile-status-msg" style="font-size: 12px; color: #8b949e; margin-top: 8px; font-family: monospace;">Auto mode dynamically selects Day (1080p) from 06:00-18:00 and Night (720p) from 18:00-06:00.</div>
+  </div>
+
   <div class="ai-controls" style="margin-top: 16px; padding: 12px; background: #1c2128; border-radius: 6px; border: 1px solid #444c56; display: flex; flex-direction: column; gap: 10px;">
     <div style="display: flex; align-items: center; gap: 10px;">
         <input type="checkbox" id="yolo-toggle">
@@ -277,8 +291,70 @@
         startYOLO();
     });
 
+    function selectProfile(profileName) {
+      console.log('Selecting profile:', profileName);
+      const statusMsg = document.getElementById('profile-status-msg');
+      if (statusMsg) {
+        statusMsg.textContent = `Applying ${profileName.toUpperCase()} profile & restarting camera stream...`;
+        statusMsg.style.color = '#79c0ff';
+      }
+
+      updateProfileButtonsUI(profileName);
+
+      const hostname = window.location.hostname || 'localhost';
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${hostname}:8765`;
+      const payload = JSON.stringify({ action: 'set_profile', profile: profileName });
+
+      if (yoloSocket && yoloSocket.readyState === WebSocket.OPEN) {
+        yoloSocket.send(payload);
+      } else {
+        try {
+          const tempWs = new WebSocket(wsUrl);
+          tempWs.onopen = () => {
+            tempWs.send(payload);
+            setTimeout(() => tempWs.close(), 1000);
+          };
+          tempWs.onerror = () => {
+            if (statusMsg) {
+              statusMsg.textContent = `Failed to connect to service on port 8765 to update profile.`;
+              statusMsg.style.color = '#da3633';
+            }
+          };
+        } catch (e) {
+          console.error('Profile socket error:', e);
+        }
+      }
+    }
+
+    function updateProfileButtonsUI(profileName) {
+      const profiles = ['auto', 'day', 'night', 'low-latency'];
+      profiles.forEach(p => {
+        const btn = document.getElementById(`btn-profile-${p}`);
+        if (btn) {
+          if (p === profileName) {
+            btn.style.borderColor = '#58a6ff';
+            btn.style.background = '#1f2937';
+          } else {
+            btn.style.borderColor = '#30363d';
+            btn.style.background = '#21262d';
+          }
+        }
+      });
+      const badge = document.getElementById('active-profile-badge');
+      if (badge) {
+        let label = 'Active: ';
+        if (profileName === 'auto') label += '🤖 Auto (Day/Night)';
+        else if (profileName === 'day') label += '☀️ Day Mode (1080p25)';
+        else if (profileName === 'night') label += '🌙 Night Mode (720p30)';
+        else if (profileName === 'low-latency') label += '⚡ Low Latency (720p60)';
+        else label += profileName.toUpperCase();
+        badge.textContent = label;
+      }
+    }
+
     function startYOLO() {
-      const hostname = window.location.hostname || '192.168.1.231';
+      const hostname = window.location.hostname || 'localhost';
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${protocol}//${hostname}:8765`;
       
@@ -297,11 +373,25 @@
           yoloSocket.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                drawBoxes(data.boxes);
-                if (data.boxes.length > 0) {
-                    updateYoloStatus(`Connected - Detecting ${data.boxes.length} objects`, '#39ff14');
-                } else {
-                    updateYoloStatus('Connected - No objects detected', '#39ff14');
+                if (data.profile) {
+                    updateProfileButtonsUI(data.profile);
+                }
+                if (data.type === 'profile_ack') {
+                    const statusMsg = document.getElementById('profile-status-msg');
+                    if (statusMsg) {
+                        statusMsg.textContent = `Profile ${data.profile.toUpperCase()} applied! Reconnecting video stream...`;
+                        statusMsg.style.color = '#39ff14';
+                    }
+                    setTimeout(() => location.reload(), 2500);
+                    return;
+                }
+                if (data.boxes) {
+                    drawBoxes(data.boxes);
+                    if (data.boxes.length > 0) {
+                        updateYoloStatus(`Connected - Detecting ${data.boxes.length} objects`, '#39ff14');
+                    } else {
+                        updateYoloStatus('Connected - No objects detected', '#39ff14');
+                    }
                 }
             } catch (e) {
                 console.error('Error parsing YOLO data:', e);

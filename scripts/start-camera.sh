@@ -269,10 +269,21 @@ main() {
         esac
     done
     
+    # Read active profile from config if available
+    PROFILE_FILE="$(dirname "$0")/../config/active_profile.txt"
+    if [ -f "$PROFILE_FILE" ] && [ "$PROFILE" = "auto" ]; then
+        SAVED_PROFILE=$(cat "$PROFILE_FILE" | tr -d ' \n\r')
+        if [ -n "$SAVED_PROFILE" ]; then
+            PROFILE="$SAVED_PROFILE"
+            log "Loaded profile setting from config: $PROFILE"
+        fi
+    fi
+
     # Determine profile
     if [ "$PROFILE" = "auto" ]; then
-        PROFILE=$(get_time_profile)
-        log "Auto-selected profile: $PROFILE"
+        TIME_PROF=$(get_time_profile)
+        log "Auto-selected day/night profile: $TIME_PROF (based on current hour $(date +%H):00)"
+        PROFILE="$TIME_PROF"
     fi
     
     # Pre-flight checks

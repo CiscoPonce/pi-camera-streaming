@@ -1,0 +1,16 @@
+[Unit]
+Description=Raspberry Pi 5 Hardware Camera Streaming Service
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/pi-camera-streaming
+ExecStartPre=/usr/bin/docker compose up -d
+ExecStart=/home/ubuntu/pi-camera-streaming/scripts/start-camera.sh
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
