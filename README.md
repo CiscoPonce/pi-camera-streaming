@@ -5,8 +5,9 @@
 [![Docker](https://img.shields.io/badge/Docker-Containerized-blue.svg)](https://www.docker.com/)
 [![OpenVINO AI](https://img.shields.io/badge/OpenVINO-Accelerated-brightgreen.svg)](https://docs.openvino.ai/)
 [![System Test](https://img.shields.io/badge/System%20Test-7%2F7%20Passed-success.svg)](./scripts/test-setup.sh)
+[![CPU Optimized](https://img.shields.io/badge/CPU-Resource%20Optimized-success.svg)](#-slimmed-down-resource-performance)
 
-A professional, sub-500ms low-latency camera streaming solution for **Raspberry Pi 5 with Camera Module 3 (IMX708)**, featuring **OpenVINO FP16 Accelerated YOLO AI Object Detection**, WebRTC support, Docker containerization, and an intuitive web viewer.
+A professional, ultra-low-latency camera streaming solution for **Raspberry Pi 5 with Camera Module 3 (IMX708)**, featuring **OpenVINO FP16 Accelerated YOLO AI Object Detection**, WebRTC support, adaptive CPU resource management, Docker containerization, and a modern web viewer.
 
 **Created by [CiscoPonce](https://github.com/CiscoPonce)**
 
@@ -17,19 +18,26 @@ A professional, sub-500ms low-latency camera streaming solution for **Raspberry 
 ```text
 [SUCCESS] 7/7 System Diagnostic Tests Passed!
 --------------------------------------------------
-[✓] Camera hardware: Sony IMX708 (Module 3) @ 60 FPS (PiSP RP1 ISP)
+[✓] Camera Hardware: Sony IMX708 (Module 3) @ 30 FPS (PiSP RP1 ISP)
 [✓] Docker Engine & Container Orchestration: Active
 [✓] SRS Realtime Media Server: Active (WebRTC / RTMP / FLV)
 [✓] Web Viewer Interface (Nginx): Accessible on Port 80
 [✓] OpenVINO AI WebSocket Service: Active on Port 8765
 [✓] Network Port Access: All 5 required ports open
-[✓] System Health: CPU 57.85°C | RAM 1.7GB/15GB (13.3GB free)
+[✓] System Health: CPU 56.75°C | RAM 2.0GB/15GB (13.0GB free) | Load 4.33
 ```
 
-### Highlights
-* **Native Pi 5 Hardware ISP (`rpi/pisp`):** Built custom `libcamera v0.7.1` + `rpicam-apps` for Raspberry Pi 5 RP1 CFE controller & PiSP hardware block (`/dev/media0` & `/dev/media1`).
-* **Real-time OpenVINO YOLO AI Overlay:** Runs **YOLO11 Small (`yolo11s_openvino_model`)** in OpenVINO FP16 format, streaming live JSON bounding boxes over WebSockets (`ws://...:8765`) without video stutter.
-* **Sub-500ms WebRTC Streaming:** Ultra-low latency streaming with automatic high-reliability HTTP-FLV fallback.
+---
+
+## ⚡ Slimmed-Down Resource Performance
+
+| Component / Service | Idle / Unticked | Active Mode | Performance Optimization |
+| :--- | :--- | :--- | :--- |
+| **YOLO OpenVINO AI Service** | **`0.0% CPU`** | **`45.0% CPU`** | Adaptive standby loop (pauses 100% when unticked in UI) |
+| **FFmpeg H.264 Encoder** | **`36.7% CPU`** | **`36.7% CPU`** | Tuned 30 FPS pipeline (-60% CPU savings vs 60 FPS) |
+| **PiSP Camera Capture** | **`8.3% CPU`** | **`8.3% CPU`** | Native Pi 5 RP1 hardware ISP capture (`/dev/media0`) |
+| **SRS Media Server** | **`8.4% CPU`** | **`8.4% CPU`** | Low-overhead Docker RTMP/WebRTC container |
+| **Total System Load** | **`1.4`** | **`4.33`** | Leaves >70% CPU and 13GB RAM free for other projects |
 
 ---
 
@@ -37,10 +45,10 @@ A professional, sub-500ms low-latency camera streaming solution for **Raspberry 
 
 This project demonstrates advanced engineering skills in:
 - **Embedded Systems Development** with Raspberry Pi 5 & Camera Module 3
-- **Edge Computer Vision & AI** using OpenVINO FP16 & YOLO11
+- **Edge Computer Vision & AI** using OpenVINO FP16 & YOLO11 Small
 - **Real-time Video Streaming** using WebRTC, RTMP, and HTTP-FLV
+- **Adaptive CPU Resource Management** (Client-aware inference pausing)
 - **Docker Containerization** for scalable deployment
-- **Asynchronous System Architecture** (Decoupled media streaming & AI inference)
 - **Performance Optimization** for ARM NEON SIMD vector hardware
 
 ---
@@ -62,10 +70,10 @@ This project demonstrates advanced engineering skills in:
 
 - **🚀 Sub-500ms WebRTC Streaming**: Direct WebRTC peer connections with instant HTTP-FLV fallback.
 - **🤖 Real-time OpenVINO YOLO11 Overlay**: Live target detection overlay (`person`, `car`, `bicycle`, etc.) toggleable directly from the web browser.
+- **🌱 Adaptive CPU Saver**: Unticking YOLO on the web UI pauses inference, dropping AI CPU usage to **0%**.
 - **🍓 Raspberry Pi 5 PiSP Hardware Native**: Custom compiled `rpi/pisp` driver for the Pi 5 RP1 controller.
 - **🐳 Docker Containerized**: Isolated SRS and Nginx web services.
 - **🌐 Modern Web Viewer**: Responsive dark-mode UI with live status indicators, mute toggles, and fullscreen mode.
-- **⚡ Performance Profiles**: Low-latency (60 FPS), day (1080p), and night profiles.
 - **📊 100% Automated Testing**: Diagnostic script (`./scripts/test-setup.sh`) verifying end-to-end component health.
 
 ---
@@ -79,7 +87,7 @@ This project demonstrates advanced engineering skills in:
 | **1935** | RTMP Ingest | TCP | Live video stream ingest |
 | **1985** | SRS API | HTTP | WebRTC signaling & server management API |
 | **8081** | HTTP Console | HTTP | FLV playback endpoint (`/live/cam.flv`) & console |
-| **8000-8100**| WebRTC ICE | UDP | Media candidate negotiation |
+| **8000-8100**| WebRTC ICE | UDP | Interactive connectivity establishment |
 
 ---
 
@@ -123,8 +131,8 @@ cd pi-camera-streaming
 # Start Docker containers (SRS + Nginx)
 docker compose up -d
 
-# Launch 60 FPS Hardware Camera Stream
-./scripts/start-camera.sh --profile low-latency &
+# Launch 30 FPS Hardware Camera Stream
+./scripts/start-camera.sh --fps 30 &
 
 # Launch OpenVINO YOLO AI WebSocket Service
 python3 ai_vision/yolo_service.py &
