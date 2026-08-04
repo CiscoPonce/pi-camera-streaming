@@ -25,29 +25,38 @@ def run_detection_loop(loop):
     global LATEST_DETECTIONS
     logging.info(f"Loading OpenVINO Accelerated YOLO model ({MODEL_PATH})...")
     model = YOLO(MODEL_PATH, task="detect")  # OpenVINO FP16 Accelerated Model for Pi 5
-    logging.info("OpenVINO YOLO model loaded successfully!")
+    logging.info("OpenVINO YOLO model loaded successfully! Standby mode ready.")
 
-    cap = cv2.VideoCapture(STREAM_URL)
-    if not cap.isOpened():
-        logging.error(f"Failed to open video stream: {STREAM_URL}")
-        while not cap.isOpened():
-            cv2.waitKey(1000)
-            cap = cv2.VideoCapture(STREAM_URL)
-
-    logging.info("Connected to live camera RTMP stream. Starting OpenVINO inference loop...")
+    cap = None
     
-    frame_count = 0
     while True:
+        # Dynamic Resource Saver: If unticked / no active WebSockets, pause inference to free 100% CPU!
+        if not CONNECTED_CLIENTS:
+            if cap is not None and cap.isOpened():
+                logging.info("No clients connected to YOLO WebSocket. Pausing inference & releasing camera stream (CPU 0%).")
+                cap.release()
+                cap = None
+                LATEST_DETECTIONS = {"boxes": []}
+            cv2.waitKey(300)
+            continue
+
+        # Client connected! Open or verify camera stream connection
+        if cap is None or not cap.isOpened():
+            logging.info("Frontend connected! Resuming live camera RTMP stream for OpenVINO inference...")
+            cap = cv2.VideoCapture(STREAM_URL)
+            if not cap.isOpened():
+                logging.warning("Waiting for RTMP stream to be ready...")
+                cv2.waitKey(1000)
+                continue
+
         ret, frame = cap.read()
         if not ret:
             logging.warning("Stream frame drop. Retrying stream connection...")
             cap.release()
+            cap = None
             cv2.waitKey(500)
-            cap = cv2.VideoCapture(STREAM_URL)
             continue
 
-        frame_count += 1
-        
         # Run OpenVINO accelerated inference
         results = model.predict(frame, conf=0.35, verbose=False, imgsz=640)
         
