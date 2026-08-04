@@ -50,15 +50,20 @@ def run_detection_loop(loop):
                 continue
 
         ret, frame = cap.read()
+        frame_count += 1
         if not ret:
             logging.warning("Stream frame drop. Retrying stream connection...")
             cap.release()
             cap = None
             cv2.waitKey(500)
+            frame_count += 1
+            
+        # Optimize CPU: Infer every 3rd frame (approx 10 FPS detection rate)
+        if frame_count % 3 != 0 and len(CONNECTED_CLIENTS) > 0:
             continue
 
-        # Run OpenVINO accelerated inference
-        results = model.predict(frame, conf=0.35, verbose=False, imgsz=640)
+        # Run OpenVINO accelerated inference at optimized 416x416 resolution
+        results = model.predict(frame, conf=0.35, verbose=False, imgsz=416)
         
         boxes_list = []
         if results and len(results) > 0:
