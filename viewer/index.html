@@ -36,12 +36,29 @@
       margin-bottom: 20px;
     }
     
+    .video-container {
+      position: relative;
+      width: 100%;
+      max-width: 960px;
+      margin-bottom: 16px;
+    }
+
     video { 
       width: 100%; 
-      max-width: 960px; 
+      display: block;
       background: #000; 
       border-radius: 8px; 
       border: 1px solid #2a3644; 
+    }
+
+    #overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
     }
     
     .status {
@@ -115,7 +132,19 @@
   <h1>Pi Camera Viewer</h1>
   <p class="subtitle">Raspberry Pi 5 Camera Module 3 Live Stream</p>
   
-  <video id="player" playsinline autoplay muted></video>
+  <div class="video-container">
+    <video id="player" playsinline autoplay muted></video>
+    <canvas id="overlay"></canvas>
+  </div>
+  
+  <div class="ai-controls" style="margin-top: 16px; padding: 12px; background: #1c2128; border-radius: 6px; border: 1px solid #444c56; display: flex; flex-direction: column; gap: 10px;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <input type="checkbox" id="yolo-toggle">
+        <label for="yolo-toggle" style="font-weight: 500; cursor: pointer; color: #79c0ff;">Enable YOLO26 Object Detection (Live Overlay)</label>
+        <button id="yolo-debug-btn" style="padding: 2px 8px; font-size: 10px;">Force Connect</button>
+    </div>
+    <div id="yolo-status" style="font-size: 12px; color: #8b949e; font-family: monospace;">YOLO Status: Not enabled</div>
+  </div>
   
   <div id="status" class="status">
     Connecting to stream...
@@ -139,7 +168,6 @@
   <script src="srs.player.js"></script>
   <script>
     // Enhanced viewer functionality
-    let currentPlayer = null;
     let isMuted = true;
     
     const player = document.getElementById('player');
@@ -210,6 +238,138 @@
     
     // Initialize
     updateStatus('Initializing player...', 'info');
+
+    // YOLO Integration
+    const yoloToggle = document.getElementById('yolo-toggle');
+    const yoloStatus = document.getElementById('yolo-status');
+    const overlay = document.getElementById('overlay');
+    const ctx = overlay.getContext('2d');
+    let yoloSocket = null;
+
+    function updateYoloStatus(msg, color = '#8b949e') {
+        yoloStatus.textContent = `YOLO Status: ${msg}`;
+        yoloStatus.style.color = color;
+    }
+
+    function resizeOverlay() {
+      overlay.width = player.clientWidth;
+      overlay.height = player.clientHeight;
+    }
+
+    window.addEventListener('resize', resizeOverlay);
+    player.addEventListener('loadedmetadata', resizeOverlay);
+    player.addEventListener('play', () => {
+        setTimeout(resizeOverlay, 500);
+    });
+
+    yoloToggle.addEventListener('change', () => {
+      console.log('YOLO Toggle changed:', yoloToggle.checked);
+      if (yoloToggle.checked) {
+        startYOLO();
+      } else {
+        stopYOLO();
+      }
+    });
+
+    document.getElementById('yolo-debug-btn').addEventListener('click', () => {
+        console.log('Force Connect clicked');
+        yoloToggle.checked = true;
+        startYOLO();
+    });
+
+    function startYOLO() {
+      const hostname = window.location.hostname || '192.168.1.231';
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${hostname}:8765`;
+      
+      console.log('Connecting to YOLO at:', wsUrl);
+      updateYoloStatus(`Connecting to ${wsUrl}...`, '#79c0ff');
+      
+      try {
+          yoloSocket = new WebSocket(wsUrl);
+
+          yoloSocket.onopen = () => {
+            console.log('YOLO WebSocket Connected');
+            updateYoloStatus('Connected & Running', '#39ff14');
+            resizeOverlay();
+          };
+
+          yoloSocket.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                drawBoxes(data.boxes);
+                if (data.boxes.length > 0) {
+                    updateYoloStatus(`Connected - Detecting ${data.boxes.length} objects`, '#39ff14');
+                } else {
+                    updateYoloStatus('Connected - No objects detected', '#39ff14');
+                }
+            } catch (e) {
+                console.error('Error parsing YOLO data:', e);
+            }
+          };
+
+          yoloSocket.onclose = (event) => {
+            console.log('YOLO WebSocket Closed:', event.code, event.reason);
+            ctx.clearRect(0, 0, overlay.width, overlay.height);
+            if (yoloToggle.checked) {
+              updateYoloStatus(`Disconnected (Code: ${event.code}). Retrying...`, '#da3633');
+              setTimeout(() => {
+                  if (yoloToggle.checked) startYOLO();
+              }, 3000);
+            } else {
+              updateYoloStatus('Disabled');
+            }
+          };
+
+          yoloSocket.onerror = (err) => {
+            console.error('YOLO WebSocket error observed');
+            updateYoloStatus('Connection failed. Is port 8765 open?', '#da3633');
+          };
+      } catch (e) {
+          console.error('WebSocket creation error:', e);
+          updateYoloStatus(`Setup error: ${e.message}`, '#da3633');
+      }
+    }
+
+    function stopYOLO() {
+      if (yoloSocket) {
+        yoloSocket.close();
+        yoloSocket = null;
+      }
+      ctx.clearRect(0, 0, overlay.width, overlay.height);
+      updateYoloStatus('Disabled');
+    }
+
+    function drawBoxes(boxes) {
+      ctx.clearRect(0, 0, overlay.width, overlay.height);
+      
+      if (!boxes || boxes.length === 0) return;
+
+      ctx.strokeStyle = '#39ff14'; // Neon Green
+      ctx.lineWidth = 3;
+      ctx.font = 'bold 16px monospace';
+      
+      boxes.forEach(item => {
+        const [x1, y1, x2, y2] = item.box;
+        const left = x1 * overlay.width;
+        const top = y1 * overlay.height;
+        const width = (x2 - x1) * overlay.width;
+        const height = (y2 - y1) * overlay.height;
+
+        // Draw Box
+        ctx.strokeRect(left, top, width, height);
+        
+        // Draw Label Background
+        const label = `${item.label} ${Math.round(item.conf * 100)}%`;
+        const textWidth = ctx.measureText(label).width;
+        ctx.fillStyle = 'rgba(57, 255, 20, 0.8)';
+        ctx.fillRect(left, top > 25 ? top - 25 : top, textWidth + 10, 25);
+        
+        // Draw Label Text
+        ctx.fillStyle = '#000000';
+        ctx.fillText(label, left + 5, top > 25 ? top - 7 : top + 18);
+      });
+    }
   </script>
 </body>
 </html>

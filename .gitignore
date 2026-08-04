@@ -90,6 +90,17 @@ Thumbs.db
 tmp/
 temp/
 
+# Python Virtual Environments
+venv/
+*_env/
+detection_env/
+yolo_env/
+
+# Large ML models and cache files (>100MB)
+/*.litertlm
+*.xnnpack_cache*
+*.bin
+
 # Recordings
 recordings/
 *.flv
@@ -99,3 +110,4 @@ recordings/
 # System files
 *.pid
 *.lock
+
