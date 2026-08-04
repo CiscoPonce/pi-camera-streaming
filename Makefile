@@ -36,20 +36,26 @@ install:
 # Start all services
 start:
 	@echo "Starting services..."
-	docker-compose up -d
+	docker compose up -d 2>/dev/null || docker-compose up -d
 	@echo "Services started. Run 'make start-camera' to begin streaming."
 
 # Start camera streaming
 start-camera:
 	@echo "Starting camera streaming..."
 	chmod +x scripts/start-camera.sh
-	./scripts/start-camera.sh
+	./scripts/start-camera.sh --fps 30 &
+
+# Start YOLO OpenVINO service
+start-yolo:
+	@echo "Starting OpenVINO YOLO AI service..."
+	python3 ai_vision/yolo_service.py &
 
 # Stop all services
 stop:
 	@echo "Stopping services..."
 	pkill -f rpicam-vid || true
-	docker-compose down
+	pkill -f yolo_service.py || true
+	docker compose down 2>/dev/null || docker-compose down
 
 # Restart all services
 restart: stop start
